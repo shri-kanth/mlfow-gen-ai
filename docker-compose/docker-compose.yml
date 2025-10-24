@@ -114,9 +114,8 @@ services:
       - ./gateway-config.yaml:/etc/mlflow/gateway-config.yaml
     command: >
       /bin/bash -c "
-        mlflow gateway start \
-          --config-path /etc/mlflow/gateway-config.yaml \
-          --port ${MLFLOW_GATEWAY_PORT}
+        pip install --no-cache-dir mlflow[gateway]==${MLFLOW_VERSION_TAG} &&
+        mlflow gateway start --config-path /etc/mlflow/gateway-config.yaml --host ${MLFLOW_GATEWAY_HOST} --port ${MLFLOW_GATEWAY_PORT}
       "
     ports:
       - "${MLFLOW_GATEWAY_PORT}:${MLFLOW_GATEWAY_PORT}"
