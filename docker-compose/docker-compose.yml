@@ -29,7 +29,13 @@ services:
       - "9000:9000"
       - "9001:9001"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:${MINIO_PORT}/minio/health/live"]
+      test:
+        [
+          "CMD",
+          "curl",
+          "-f",
+          "http://localhost:${MINIO_PORT}/minio/health/live",
+        ]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -48,7 +54,7 @@ services:
       '
     restart: "no"
 
-  mlflow:
+  mlflow-server:
     image: ghcr.io/mlflow/mlflow:${MLFLOW_VERSION}
     container_name: mlflow-server
     depends_on:
@@ -70,8 +76,11 @@ services:
       MLFLOW_S3_IGNORE_TLS: "true"
 
       # Server host/port
-      MLFLOW_HOST: ${MLFLOW_HOST}
-      MLFLOW_PORT: ${MLFLOW_PORT}
+      MLFLOW_HOST: ${MLFLOW_SERVER_HOST}
+      MLFLOW_PORT: ${MLFLOW_SERVER_PORT}
+
+      # Gateway
+      MLFLOW_DEPLOYMENTS_TARGET: http://mlflow-gateway:${MLFLOW_GATEWAY_PORT}
 
     command: >
       /bin/bash -c "
@@ -79,18 +88,45 @@ services:
         mlflow server \
           --backend-store-uri ${MLFLOW_BACKEND_STORE_URI} \
           --default-artifact-root ${MLFLOW_DEFAULT_ARTIFACT_ROOT} \
-          --host ${MLFLOW_HOST} \
-          --port ${MLFLOW_PORT}
+          --host ${MLFLOW_SERVER_HOST} \
+          --port ${MLFLOW_SERVER_PORT}
       "
     ports:
-      - "${MLFLOW_PORT}:${MLFLOW_PORT}"
+      - "${MLFLOW_SERVER_PORT}:${MLFLOW_SERVER_PORT}"
     healthcheck:
       test:
         [
           "CMD",
           "python",
           "-c",
-          "import urllib.request; urllib.request.urlopen('http://localhost:${MLFLOW_PORT}/health')",
+          "import urllib.request; urllib.request.urlopen('http://localhost:${MLFLOW_SERVER_PORT}/health')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  mlflow-gateway:
+    image: ghcr.io/mlflow/mlflow:${MLFLOW_VERSION}
+    container_name: mlflow-gateway
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      - ./gateway-config.yaml:/etc/mlflow/gateway-config.yaml
+    command: >
+      /bin/bash -c "
+        mlflow gateway start \
+          --config-path /etc/mlflow/gateway-config.yaml \
+          --port ${MLFLOW_GATEWAY_PORT}
+      "
+    ports:
+      - "${MLFLOW_GATEWAY_PORT}:${MLFLOW_GATEWAY_PORT}"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:${MLFLOW_GATEWAY_PORT}/health')",
         ]
       interval: 10s
       timeout: 5s
